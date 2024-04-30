@@ -1,0 +1,23 @@
+from mongoengine import Document, StringField, DictField, BooleanField, IntField
+
+class Collaborator(Document):
+    id = IntField(primary_key=True)
+    login = StringField(required=True)
+    node_id = StringField()
+    avatar_url = StringField()
+    gravatar_id = StringField()
+    url = StringField()
+    html_url = StringField()
+    followers_url = StringField()
+    following_url = StringField()
+    gists_url = StringField()
+    starred_url = StringField()
+    subscriptions_url = StringField()
+    organizations_url = StringField()
+    repos_url = StringField()
+    events_url = StringField()
+    received_events_url = StringField()
+    type = StringField()
+    site_admin = BooleanField()
+    permissions = DictField()
+    role_name = StringField()
