@@ -1,71 +1,43 @@
-import requests
-import json
-from dotenv import load_dotenv
+import sys
 import os
-load_dotenv()
-github_token   = os.getenv('github_token')
-github_base_url = os.getenv('github_base_url')
-username = os.getenv('username')
-headers = {'Authorization': f'token {github_token }'}
+import logging
+from prefect import task
+from dotenv import load_dotenv
 
-def get_repositories_name(username, github_base_url="https://api.github.com/users", token=""):
-    headers = {'Authorization': f'token {token}'} if token else {}
-    repos_url = f"{github_base_url}/{username}/repos"
+# Add the project root directory to the system path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+sys.path.append(project_root)
+
+from database.connection import connection_db
+from etl.extract_data import github_data_extraction
+
+logger = logging.getLogger(__name__)
+
+@task
+def setup():
     try:
-        response = requests.get(repos_url, headers=headers)
-        response.raise_for_status()
-        return [repo['name'] for repo in response.json()]
-    except requests.exceptions.RequestException as e:
-        print(f"Error retrieving repository names: {e}")
-        return []
+        logger.info("Setting up...")
+        # Connection to the database
+        connection_db("GitHub_DataStore")
+        # Load environment variables from .env file
+        load_dotenv()
+        base_url = os.getenv("BASE_URL")
+        owner = os.getenv("OWNER_NAME")
+        token = os.getenv("TOKEN")
+        # Request headers with authentication token
+        headers = {'Authorization': f'token {token}'}
+        logger.info("Setup completed successfully.")
+        return base_url, owner, headers
+    except Exception as e:
+        logger.error(f"Error during setup: {e}")
+        raise
 
-def get_repository_general_data(repository):
-    url = f"{github_base_url}/{username}/{repository}"
+if __name__ == '__main__':
     try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        print(f"Error retrieving repository data: {e}")
-        return None
-
-def get_branches_name(repository):
-    branches_url = f"{github_base_url}/{username}/{repository}/branches"
-    try:
-        response = requests.get(branches_url, headers=headers)
-        response.raise_for_status()
-        return [branch['name'] for branch in response.json()]
-    except requests.exceptions.RequestException as e:
-        print(f"Error retrieving branch names: {e}")
-        return []
-
-def get_commits(repository,branch_name):
-    """Retrieve commits from a specific branch of the repository."""
-    url = f"{github_base_url}/{username}/{repository}/commits?sha={branch_name}"
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        print(f"Error retrieving commits: {e}")
-        return []
-
-if __name__ == "__main__":
-    repository_data = []
-    data ={}
-    repositories = get_repositories_name(username,token=github_token)    
-    for repository in repositories:
-        repo_details = get_repository_general_data(repository)
-        branches = get_branches_name(repository)
-        repo_data = {
-            'details': repo_details,
-            'branches': {}
-        }
-        for branch in branches:
-            commits = get_commits(repository, branch)
-            repo_data['branches'][branch] = commits
-        data[repository] = repo_data
-
-    json_string = json.dumps(data, indent=4)
-    with open('my_dict.txt', 'w') as file:
-        file.write(json_string)
+        base_url, owner, headers = setup()
+        logger.info("Starting data extraction...")
+        github_data_extraction(owner, headers, base_url)
+        logger.info("Data extraction completed.")
+    except Exception as e:
+        logger.error(f"Error during execution: {e}", exc_info=True)
