@@ -1,4 +1,5 @@
 import requests
+import logger
 from datetime import timedelta
 from prefect import task, flow
 from prefect.tasks import task_input_hash
@@ -9,6 +10,9 @@ from database.models.commit import CommitDocument
 from database.models.commit_comment import CommitComment
 from database.models.branch import Branch
 from database.models.repos import Repository
+
+# Use logger
+logger = logger.logger
 
 @task
 def fetch_data(url, params=None, headers=None):
@@ -23,9 +27,13 @@ def fetch_data(url, params=None, headers=None):
     Returns:
     - JSON response data.
     """
-    response = requests.get(url, params=params, headers=headers)
-    response.raise_for_status()  # Raise an exception for HTTP errors
-    return response.json()
+    try:
+        response = requests.get(url, params=params, headers=headers)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        return response.json()
+    except Exception as e:
+        logger.error(f"Error fetching data from {url}: {e}")
+        raise
 
 @task(cache_key_fn=task_input_hash, cache_expiration=timedelta(days=30))
 def get_repositories(base_url, owner, headers):
@@ -35,7 +43,8 @@ def get_repositories(base_url, owner, headers):
         store_data_in_database(repos_data, Repository)
         return [repo['name'] for repo in repos_data]
     except Exception as e:
-        print(f"An error occurred while fetching repositories: {e}")
+        logger.error(f"Error getting repositories: {e}")
+        raise
 
 @task
 def get_branches(base_url, owner, repo, headers):
@@ -45,7 +54,8 @@ def get_branches(base_url, owner, repo, headers):
         # save_json(branches_data, 'branches.json')
         store_data_in_database(branches_data, Branch)
     except Exception as e:
-        print(f"An error occurred while fetching branches: {e}")
+        logger.error(f"Error getting branches: {e}")
+        raise
 
 @task
 def get_commits(base_url, owner, repo, headers):
@@ -55,7 +65,8 @@ def get_commits(base_url, owner, repo, headers):
         # save_json(commits_data, 'commits.json')
         store_data_in_database(commits_data, CommitDocument)
     except Exception as e:
-        print(f"An error occurred while fetching commits: {e}")
+        logger.error(f"Error getting commits: {e}")
+        raise
 
 @task
 def get_commit_comments(base_url, owner, repo, headers):
@@ -65,7 +76,8 @@ def get_commit_comments(base_url, owner, repo, headers):
         # save_json(commit_comments_data, 'commit_comments.json')
         store_data_in_database(commit_comments_data, CommitComment)
     except Exception as e:
-        print(f"An error occurred while fetching commit comments: {e}")
+        logger.error(f"Error getting commit comments: {e}")
+        raise
 
 @task
 def get_collaborators(base_url, owner, repo, headers):
@@ -75,8 +87,9 @@ def get_collaborators(base_url, owner, repo, headers):
         # save_json(collaborators_data, 'collaborators.json')
         store_data_in_database(collaborators_data, Collaborator)
     except Exception as e:
-        print(f"An error occurred while fetching collaborators: {e}")
-
+        logger.error(f"Error getting commit collaborators: {e}")
+        raise
+    
 # Define flow
 @flow
 def github_data_extraction(owner, headers, base_url):        
